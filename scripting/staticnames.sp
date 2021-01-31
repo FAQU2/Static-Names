@@ -11,15 +11,13 @@ public Plugin myinfo =
 {
 	name = "Static Names",
 	author = "FAQU",
-	version = "1.0"
+	version = "1.0.1"
 };
 
 public void OnPluginStart()
 {
 	stringmap = new StringMap();
-	
 	BuildPath(Path_SM, filepath, sizeof(filepath), "configs/static-names.cfg");
-	HookEvent("player_changename", Event_PlayerChangename);
 }
 
 public void OnMapStart()
@@ -30,15 +28,17 @@ public void OnMapStart()
 	
 	if (!kv.ImportFromFile(filepath))
 	{
-		SetFailState("Error importing file %s", filepath);
+		CreateExample(kv);
+		return;
 	}
 	
 	if (!kv.GotoFirstSubKey())
 	{
-		SetFailState("Error reading from file %s (could not read the first sub key)", filepath);
+		CreateExample(kv);
+		return;
 	}
 	
-	char steamid[32];
+	char steamid[24];
 	char name[MAX_NAME_LENGTH];
 	
 	do
@@ -50,12 +50,14 @@ public void OnMapStart()
 		}
 		
 		kv.GetString("name", name, sizeof(name));
+		
 		if (StrEqual(name, ""))
 		{
 			LogError("Error reading name from key \"%s\"", steamid);
 			continue;
 		}
-		RemovePrefix(steamid);
+		
+		RemovePrefix(steamid, sizeof(steamid));
 		stringmap.SetString(steamid, name);
 	}
 	while (kv.GotoNextKey());
@@ -70,11 +72,11 @@ public void OnClientPutInServer(int client)
 		return;
 	}
 	
-	char steamid[32];
+	char steamid[24];
 	char namestatic[MAX_NAME_LENGTH];
 	
 	GetClientAuthId(client, AuthId_Steam2, steamid, sizeof(steamid));
-	RemovePrefix(steamid);
+	RemovePrefix(steamid, sizeof(steamid));
 	
 	if (stringmap.GetString(steamid, namestatic, sizeof(namestatic)))
 	{
@@ -82,37 +84,44 @@ public void OnClientPutInServer(int client)
 	}
 }
 
-public void Event_PlayerChangename(Event event, const char[] eventname, bool dontBroadcast)
+public void OnClientSettingsChanged(int client)
 {
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	
 	if (IsFakeClient(client))
 	{
 		return;
 	}
 	
-	char steamid[32];
+	char steamid[24];
 	char namestatic[MAX_NAME_LENGTH];
 	
 	GetClientAuthId(client, AuthId_Steam2, steamid, sizeof(steamid));
-	RemovePrefix(steamid);
+	RemovePrefix(steamid, sizeof(steamid));
 	
 	if (stringmap.GetString(steamid, namestatic, sizeof(namestatic)))
 	{
-		char newname[MAX_NAME_LENGTH];
-		event.GetString("newname", newname, sizeof(newname));
+		char name[MAX_NAME_LENGTH];
+		GetClientInfo(client, "name", name, sizeof(name));
 		
-		if (!StrEqual(newname, namestatic))
+		if (!StrEqual(name, namestatic))
 		{
 			SetClientInfo(client, "name", namestatic);
 		}
 	}
 }
 
-void RemovePrefix(char steamid[32])
+void RemovePrefix(char[] steamid, int maxlength)
 {
-	ReplaceString(steamid, sizeof(steamid), "STEAM_0:0:", "");
-	ReplaceString(steamid, sizeof(steamid), "STEAM_0:1:", "");
-	ReplaceString(steamid, sizeof(steamid), "STEAM_1:0:", "");
-	ReplaceString(steamid, sizeof(steamid), "STEAM_1:1:", "");
+	ReplaceStringEx(steamid, maxlength, "STEAM_0:0:", "");
+	ReplaceStringEx(steamid, maxlength, "STEAM_0:1:", "");
+	ReplaceStringEx(steamid, maxlength, "STEAM_1:0:", "");
+	ReplaceStringEx(steamid, maxlength, "STEAM_1:1:", "");
+}
+
+void CreateExample(KeyValues kv)
+{
+	kv.JumpToKey("STEAM_0:0:11101", true);
+	kv.SetString("name", "Example");
+	kv.Rewind();
+	kv.ExportToFile(filepath);
+	delete kv;
 }
