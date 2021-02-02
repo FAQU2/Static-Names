@@ -65,25 +65,6 @@ public void OnMapStart()
 	delete kv;
 }
 
-public void OnClientPutInServer(int client)
-{
-	if (IsFakeClient(client))
-	{
-		return;
-	}
-	
-	char steamid[24];
-	char namestatic[MAX_NAME_LENGTH];
-	
-	GetClientAuthId(client, AuthId_Steam2, steamid, sizeof(steamid));
-	RemovePrefix(steamid, sizeof(steamid));
-	
-	if (stringmap.GetString(steamid, namestatic, sizeof(namestatic)))
-	{
-		SetClientInfo(client, "name", namestatic);
-	}
-}
-
 public void OnClientSettingsChanged(int client)
 {
 	if (IsFakeClient(client))
