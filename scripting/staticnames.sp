@@ -16,8 +16,11 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	stringmap = new StringMap();
 	BuildPath(Path_SM, filepath, sizeof(filepath), "configs/static-names.cfg");
+	
+	stringmap = new StringMap();
+	
+	HookEvent("player_changename", Event_PlayerChangename);
 }
 
 public void OnMapStart()
@@ -65,13 +68,36 @@ public void OnMapStart()
 	delete kv;
 }
 
-public void OnClientSettingsChanged(int client)
+public void OnClientPutInServer(int client)
 {
 	if (IsFakeClient(client))
 	{
 		return;
 	}
 	
+	char playername[MAX_NAME_LENGTH];
+	GetClientName(client, playername, sizeof(playername));
+	
+	ApplyStaticName(client, playername);
+}
+
+public void Event_PlayerChangename(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (IsFakeClient(client))
+	{
+		return;
+	}
+	
+	char playername[MAX_NAME_LENGTH];
+	event.GetString("newname", playername, sizeof(playername));
+	
+	ApplyStaticName(client, playername);
+}
+
+
+void ApplyStaticName(int client, const char[] playername)
+{
 	char steamid[24];
 	char namestatic[MAX_NAME_LENGTH];
 	
@@ -80,10 +106,7 @@ public void OnClientSettingsChanged(int client)
 	
 	if (stringmap.GetString(steamid, namestatic, sizeof(namestatic)))
 	{
-		char name[MAX_NAME_LENGTH];
-		GetClientInfo(client, "name", name, sizeof(name));
-		
-		if (!StrEqual(name, namestatic))
+		if (!StrEqual(playername, namestatic))
 		{
 			SetClientInfo(client, "name", namestatic);
 		}
