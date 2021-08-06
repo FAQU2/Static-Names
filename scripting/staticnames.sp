@@ -4,32 +4,32 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-StringMap stringmap;
-char filepath[PLATFORM_MAX_PATH];
+StringMap g_Stringmap;
+char g_Filepath[PLATFORM_MAX_PATH];
 
 public Plugin myinfo = 
 {
 	name = "Static Names",
 	author = "FAQU",
-	version = "1.0.1"
+	description = "Applies static names to given SteamIDs",
+	version = "1.1",
+	url = "https://github.com/FAQU2"
 };
 
 public void OnPluginStart()
 {
-	BuildPath(Path_SM, filepath, sizeof(filepath), "configs/static-names.cfg");
-	
-	stringmap = new StringMap();
-	
+	g_Stringmap = new StringMap();
+	BuildPath(Path_SM, g_Filepath, sizeof(g_Filepath), "configs/static-names.cfg");
 	HookEvent("player_changename", Event_PlayerChangename);
 }
 
 public void OnMapStart()
 {
-	stringmap.Clear();
+	g_Stringmap.Clear();
 	
 	KeyValues kv = new KeyValues("Static Names");
 	
-	if (!kv.ImportFromFile(filepath))
+	if (!kv.ImportFromFile(g_Filepath))
 	{
 		CreateExample(kv);
 		return;
@@ -41,91 +41,106 @@ public void OnMapStart()
 		return;
 	}
 	
-	char steamid[24];
+	char steamid[32];
 	char name[MAX_NAME_LENGTH];
 	
 	do
 	{
 		if (!kv.GetSectionName(steamid, sizeof(steamid)))
 		{
-			LogError("Error reading steamid from subkey.");
+			LogError("Error reading SteamID from file.");
+			continue;
+		}
+		
+		if (steamid[6] == 'X') // is example
+		{
 			continue;
 		}
 		
 		kv.GetString("name", name, sizeof(name));
+		TrimString(name);
 		
-		if (StrEqual(name, ""))
+		if (name[0] == '\0') // empty string
 		{
-			LogError("Error reading name from key \"%s\"", steamid);
+			LogError("Error reading name from key %s", steamid);
 			continue;
 		}
 		
-		RemovePrefix(steamid, sizeof(steamid));
-		stringmap.SetString(steamid, name);
+		int accountid = Steam2ToAccountID(steamid);
+		
+		char key[32];
+		IntToString(accountid, key, sizeof(key));
+		
+		g_Stringmap.SetString(key, name);
 	}
 	while (kv.GotoNextKey());
 	
 	delete kv;
+	
+	// useful if plugin gets reloaded
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i))
+		{
+			OnClientPutInServer(i);
+		}
+	}
 }
 
 public void OnClientPutInServer(int client)
 {
-	if (IsFakeClient(client))
+	if (!IsFakeClient(client))
 	{
-		return;
+		StaticName(client, view_as<Event>(INVALID_HANDLE));
 	}
-	
-	char playername[MAX_NAME_LENGTH];
-	GetClientName(client, playername, sizeof(playername));
-	
-	ApplyStaticName(client, playername);
 }
 
-public void Event_PlayerChangename(Event event, const char[] name, bool dontBroadcast)
+public void Event_PlayerChangename(Event event, const char[] eventname, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsFakeClient(client))
+	
+	if (!IsFakeClient(client))
 	{
-		return;
+		StaticName(client, event);
 	}
-	
-	char playername[MAX_NAME_LENGTH];
-	event.GetString("newname", playername, sizeof(playername));
-	
-	ApplyStaticName(client, playername);
 }
 
-
-void ApplyStaticName(int client, const char[] playername)
+void StaticName(int client, Event event)
 {
-	char steamid[24];
-	char namestatic[MAX_NAME_LENGTH];
-	
-	GetClientAuthId(client, AuthId_Steam2, steamid, sizeof(steamid));
-	RemovePrefix(steamid, sizeof(steamid));
-	
-	if (stringmap.GetString(steamid, namestatic, sizeof(namestatic)))
+	int accountid = GetSteamAccountID(client);
+		
+	char key[32];
+	IntToString(accountid, key, sizeof(key));
+		
+	char namestatic[32];
+		
+	if (g_Stringmap.GetString(key, namestatic, sizeof(namestatic)))
 	{
-		if (!StrEqual(playername, namestatic))
+		char name[MAX_NAME_LENGTH];
+		
+		if (!event)
+		{
+			GetClientName(client, name, sizeof(name));
+		}
+		else event.GetString("newname", name, sizeof(name));
+			
+		if (!StrEqual(name, namestatic))
 		{
 			SetClientInfo(client, "name", namestatic);
 		}
 	}
 }
 
-void RemovePrefix(char[] steamid, int maxlength)
-{
-	ReplaceStringEx(steamid, maxlength, "STEAM_0:0:", "");
-	ReplaceStringEx(steamid, maxlength, "STEAM_0:1:", "");
-	ReplaceStringEx(steamid, maxlength, "STEAM_1:0:", "");
-	ReplaceStringEx(steamid, maxlength, "STEAM_1:1:", "");
-}
-
 void CreateExample(KeyValues kv)
 {
-	kv.JumpToKey("STEAM_0:0:11101", true);
+	kv.JumpToKey("STEAM_X:Y:Z", true);
 	kv.SetString("name", "Example");
 	kv.Rewind();
-	kv.ExportToFile(filepath);
+	kv.ExportToFile(g_Filepath);
 	delete kv;
+}
+
+int Steam2ToAccountID(const char[] steam2)
+{
+	return StringToInt(steam2[10]) * 2 + steam2[8] - 48;
 }
